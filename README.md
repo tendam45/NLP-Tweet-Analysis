@@ -35,9 +35,6 @@ This project analyzes tweets from U.S. Senators during the year 2020 using vario
 2. Install requirements: `pip install -r requirements.txt`
 3. Run analysis notebooks or scripts
 
-## 🤝 Contributors
-- [Your Name](https://github.com/yourusername)
-- [Collaborators' Names]
 
 ## 📌 Future Work
 - Fine-tuned sentiment models for political context
