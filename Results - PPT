@@ -1,1 +1,53 @@
 
+This project focused on processing a real-world dataset of tweets from U.S. Senators, preparing it for model training, training NLP algorithms, and analyzing model performance, all while utilizing Natural Language Processing (NLP) concepts and techniques.
+
+The project addressed several research questions:
+
+Election Outcome Correlation:
+Do sentiment trends align with winning or losing the 2020 election? 
+Is there a significant difference in sentiment between winning and losing senators? 
+Regional Patterns:
+Which topics are most or least discussed in each region of the US? 
+Do senators from certain regions express more positivity or negativity? 
+Generational Trends:
+Do senators of different age groups show different sentiment tendencies? 
+How does age impact the topics senators most commonly discuss? 
+Data Preparation
+The dataset consisted of approximately 72,000 tweets from U.S. Senators in 2020. Supplementary data included a Wikipedia web scrape of current Senators (names, state, party, age) and a manually curated mapping of Twitter usernames to senators and 2020 election outcomes (win/loss, margin, incumbency). This data was integrated by merging the tweet dataset with senator information using usernames.
+
+Data preparation steps included handling missing values, normalizing text values, removing punctuation, stopwords, and duplicates, and converting columns to appropriate types. Tweet preprocessing involved an NLP pipeline including tokenization, lowercasing, stopword removal, POS tagging, and lemmatization via WordNet, resulting in a clean text column.
+
+NLP Techniques Utilized
+
+Sentiment Analysis: Measures the positivity or negativity of tweets. Tweets generally showed neutral-to-positive sentiment, with partisan and regional differences. The highest sentiment score observed was 0.99, and the lowest was -0.99.
+
+
+BERTopic: Creates topics from text data. This model was used for topic modeling, embedding tweets using transformer models (e.g., Sentence-BERT), clustering tweets into meaningful topics, and visualizing topic distributions. It offers advantages over LDA by capturing contextual meaning better, being more suited for short texts, and providing dynamic, interpretable topics. Popular topics identified include "Relief" (unemployment, package), "Nursing" (coronavirus, pandemic, nurse), and "Barrett" (judge, Coney).
+
+
+WordCloud: A visual representation of text data where the size of words indicates frequency.
+Training Model & Evaluation
+High-performing models such as SVM and Logistic Regression were used to quantify political tone and relate it to election outcomes. Confusion matrices were presented for SVM and Naive Bayes, illustrating how accurately the models classified positive and negative tweets, with correct predictions along the diagonal. SVM showed an accuracy of 87.80%.
+
+
+
+Results & Findings
+
+2020 Sentiment Score Trending: Sentiment scores trended over the months of 2020, with positive sentiment ranging from 0.24 to 0.33.
+
+Election Outcome Correlation: The average sentiment score for Democrats ranged from approximately 0.2 to 0.5, while for Republicans it ranged from 0 to 0.4, indicating some correlation with the margin of victory in the 2020 election.
+Regional Patterns:
+Northeast: Common topics included Nursing, Climate, and Agriculture. The average sentiment score was 0.30.
+
+Midwest: Common topics included Disasters, Relief, and China. The average sentiment score was 0.34.
+
+West: Common topics included Impeachment, Healthcare, and Postal. The average sentiment score was 0.31.
+
+South: Common topics included Climate, Wealth Gap, and Relief. The average sentiment score was 0.18.
+
+Generational Trends:
+Generation X (Age 40-55): Average tweets per username for "Impeachment" was 12.9 and "Social Media" was 17.6.
+Baby Boomer (Age 56-74): Average tweets per username for "Impeachment" was 15.4 and "Social Media" was 9.1.
+Traditionalist (Age 75-95): Average tweets per username for "Impeachment" was 29.6 and "Social Media" was 7.3.
+Conclusion
+Tweets generally showed neutral-to-positive sentiment, with partisan and regional differences in both sentiment and topics discussed, particularly around major events like COVID-19 and the 2020 election. Understanding sentiment trends on social media can help strategists craft effective messaging and predict shifts in public opinion over time. Future improvements could involve expanding the dataset to include more political figures and public opinion, refining preprocessing to better handle sarcasm and context, and enhancing sentiment analysis with fine-tuned models for greater accuracy
