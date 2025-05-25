@@ -1,0 +1,481 @@
+# Text Mining Data Preparation
+Data file
+* https://raw.githubusercontent.com/vjavaly/Baruch-CIS-9665/refs/heads/main/data/US_senators_tweets_2020_135k.csv
+
+## Our goal:
+
+This project utilizes the `US_senators_tweets_2020` dataset to investigate whether the language used by politicians on Twitter correlates with their success in the 2020 election.
+
+Key Objectives:
+- Analyze the sentiment of tweets and determine if language positivity/negativity is associated with election outcomes.
+- Conduct additional demographic and regional analyses to explore patterns, such as:
+  - Are certain regions more likely to have senators using positive or negative language?
+  - Do age groups of US senators influence their sentiment expression on Twitter?
+
+
+from datetime import datetime
+print(f'Run time: {datetime.now().strftime("%D %T")}')
+
+# pip install lxml
+
+### Import Libraries
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import nltk
+import seaborn as sns
+import requests
+from nltk.tokenize import word_tokenize
+from nltk.corpus import wordnet
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from nltk.sentiment import SentimentIntensityAnalyzer
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import classification_report
+from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.svm import SVC
+from sklearn import metrics
+from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_auc_score
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from wordcloud import WordCloud
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+from sklearn.naive_bayes import MultinomialNB
+
+nltk.download('wordnet')
+nltk.download('stopwords')
+nltk.download('punkt_tab')
+nltk.download('averaged_perceptron_tagger_eng')
+nltk.download('vader_lexicon')
+
+## Load Data
+
+### Primary Data Source
+
+df1= pd.read_csv('https://raw.githubusercontent.com/vjavaly/Baruch-CIS-9665/refs/heads/main/data/US_senators_tweets_2020_135k.csv')
+
+### Secondary Data Source
+
+# Webscrape table of active US Senators from Wikipedia
+url = 'https://en.wikipedia.org/wiki/List_of_current_United_States_senators'
+
+r = requests.get(url)
+df_webscrape = pd.read_html(r.text) # this parses all the tables in webpages to a list
+senator_wiki = df_webscrape[5]
+senator_wiki['birth_year'] = senator_wiki['Born'].str.extract(r'(\d{4})').astype(float)
+senator_wiki['Age'] = 2020 - senator_wiki['birth_year']
+senator_wiki = senator_wiki.drop(['Portrait', 'Party', 'Occupation(s)', 'Previous elective office(s)', 'Education',
+                            'Residence[4]', 'Class', 'Assumed office', 'Born', 'birth_year'], axis=1)
+senator_wiki = senator_wiki.rename(columns={'Party.1': 'Party'})
+senator_wiki.head()
+
+# Due to gaps between tweet data & active senators, we've researched delta & joined to Wiki table
+data = {
+
+    'State': ['Maryland', 'New Mexico', 'Nebraska', 'Pennsylvania', 'New Jersey', 'Michigan', 'California',
+              'Oklahoma', 'West Virginia', 'Montana', 'Arizona', 'Florida', 'Indiana', 'Utah', 'Pennsylvania',
+              'Vermont', 'North Carolina', 'Illinois', 'Alabama', 'Ohio', 'Missouri', 'Ohio', 'Delaware'],
+
+    'Senator': ['Ben Cardin', 'Ben Ray Lujan', 'Ben Sasse', 'Bob Casey Jr.', 'Bob Menendez', 'Debbie Stabenow',
+                 'Dianne Feinstein', 'Jim Inhofe', 'Joe Manchin', 'Jon Tester', 'Kyrsten Sinema',  'Marco Rubio',
+                 'Mike Braun', 'Mitt Romney', 'Pat Toomey', 'Patrick Leahy',  'Richard Burr', 'Richard Durbin',
+                 'Richard Shelby', 'Rob Portman', 'Roy Blunt', 'Sherrod Brown','Tom Carper'],
+
+    'Age': [77, 48, 48, 60, 66, 70, 87, 86, 73, 64, 44, 49, 66, 73, 59, 80, 65, 76, 86, 65, 70, 68, 73],
+
+    'Party': ['Democratic', 'Democratic', 'Republican', 'Democratic', 'Democratic', 'Democratic', 'Democratic',
+              'Republican', 'Democratic', 'Democratic', 'Democratic', 'Republican', 'Republican', 'Republican',
+              'Republican', 'Democratic', 'Republican', 'Democratic', 'Republican', 'Republican', 'Republican',
+              'Democratic', 'Democratic']}
+
+senator_1 = pd.DataFrame(data)
+senator_master = pd.concat([senator_wiki, senator_1], ignore_index=True)
+senator_master.head(5)
+
+# To successfully join this information to tweets data, we've built a data dictionary
+senator_2 = {
+    'Username': ['TTuberville', 'SenShelby', 'lisamurkowski', 'SenDanSullivan', 'SenMarkKelly', 'SenatorSinema', 'JohnBoozman', 'SenTomCotton',
+                 'SenFeinstein', 'SenatorBennet', 'SenBlumenthal', 'ChrisCoons', 'SenatorCarper', 'SenRickScott', 'SenRubioPress', 'SenBrianSchatz',
+                 'maziehirono', 'MikeCrapo', 'SenatorRisch', 'SenatorDurbin', 'SenDuckworth', 'SenToddYoung', 'SenatorBraun', 'ChuckGrassley',
+                 'SenJoniErnst', 'JerryMoran', 'RogerMarshallMD', 'RandPaul', 'SenBillCassidy', 'SenJohnKennedy', 'SenatorCollins', 'SenAngusKing',
+                 'ChrisVanHollen', 'SenatorCardin', 'SenWarren', 'SenMarkey', 'SenGaryPeters', 'SenStabenow', 'SenAmyKlobuchar', 'SenTinaSmith',
+                 'SenatorWicker', 'SenHydeSmith', 'SenHawleyPress', 'RoyBlunt', 'SteveDaines', 'SenatorTester', 'SenatorFischer', 'SenSasse',
+                 'SenCortezMasto', 'SenJackyRosen', 'SenatorShaheen', 'SenatorHassan', 'SenBooker', 'SenatorMenendez', 'MartinHeinrich', 'SenatorLujan',
+                 'SenSchumer', 'gillibrandny', 'SenThomTillis', 'SenatorBurr', 'SenJohnHoeven', 'SenKevinCramer', 'SenSherrodBrown', 'senrobportman',
+                 'SenatorLankford', 'JimInhofe', 'RonWyden', 'SenJeffMerkley', 'SenToomey', 'SenBobCaseyfe', 'SenJackReed', 'SenWhitehouse', 'LindseyGrahamSC',
+                 'SenatorTimScott', 'SenJohnThune', 'SenatorRounds', 'MarshaBlackburn', 'BillHagertyTN', 'JohnCornyn', 'SenTedCruz', 'SenMikeLee', 'SenatorRomney',
+                 'SenSanders', 'SenatorLeahy', 'MarkWarner', 'timkaine', 'PattyMurray', 'SenatorCantwell', 'SenCapito', 'Sen_JoeManchin', 'SenRonJohnson',
+                 'SenatorBaldwin', 'SenJohnBarrasso'],
+
+    'Senator': ['Tommy Tuberville', 'Richard Shelby', 'Lisa Murkowski', 'Dan Sullivan', 'Mark Kelly', 'Kyrsten Sinema', 'John Boozman', 'Tom Cotton',
+                'Dianne Feinstein', 'Michael Bennet', 'Richard Blumenthal', 'Chris Coons', 'Tom Carper', 'Rick Scott', 'Marco Rubio', 'Brian Schatz',
+                'Mazie Hirono', 'Mike Crapo', 'Jim Risch', 'Richard Durbin', 'Tammy Duckworth', 'Todd Young', 'Mike Braun', 'Chuck Grassley',
+                'Joni Ernst', 'Jerry Moran', 'Roger Marshall', 'Rand Paul', 'Bill Cassidy', 'John Kennedy', 'Susan Collins', 'Angus King', 'Chris Van Hollen',
+                'Ben Cardin', 'Elizabeth Warren', 'Ed Markey', 'Gary Peters', 'Debbie Stabenow', 'Amy Klobuchar', 'Tina Smith', 'Roger Wicker',
+                'Cindy Hyde-Smith', 'Josh Hawley', 'Roy Blunt', 'Steve Daines', 'Jon Tester', 'Deb Fischer', 'Ben Sasse', 'Catherine Cortez Masto',
+                'Jacky Rosen', 'Jeanne Shaheen', 'Maggie Hassan', 'Cory Booker', 'Bob Menendez', 'Martin Heinrich', 'Ben Ray Lujan', 'Chuck Schumer',
+                'Kirsten Gillibrand', 'Thom Tillis', 'Richard Burr', 'John Hoeven', 'Kevin Cramer', 'Sherrod Brown', 'Rob Portman', 'James Lankford',
+                'Jim Inhofe', 'Ron Wyden', 'Jeff Merkley', 'Pat Toomey', 'Bob Casey Jr.', 'Jack Reed', 'Sheldon Whitehouse', 'Lindsey Graham',
+                'Tim Scott', 'John Thune', 'Mike Rounds', 'Marsha Blackburn', 'Bill Hagerty', 'John Cornyn', 'Ted Cruz', 'Mike Lee', 'Mitt Romney',
+                'Bernie Sanders', 'Patrick Leahy', 'Mark Warner', 'Tim Kaine', 'Patty Murray', 'Maria Cantwell', 'Shelley Moore Capito', 'Joe Manchin',
+                'Ron Johnson', 'Tammy Baldwin', 'John Barrasso']}
+
+senator_2 = pd.DataFrame(senator_2)
+senator_master = pd.merge(senator_master, senator_2, on='Senator', how='inner')
+senator_master.head(5)
+
+# Additional research was done to explore election results as part of our proposed research questions
+
+senator_3 = {
+
+    'Username': ['TTuberville', 'SenShelby', 'lisamurkowski', 'SenDanSullivan', 'SenMarkKelly', 'SenatorSinema', 'JohnBoozman',
+                 'SenTomCotton', 'SenFeinstein', 'SenatorBennet', 'SenBlumenthal', 'ChrisCoons', 'SenatorCarper', 'SenRickScott',
+                 'SenRubioPress', 'SenBrianSchatz', 'maziehirono', 'MikeCrapo', 'SenatorRisch', 'SenatorDurbin', 'SenDuckworth',
+                 'SenToddYoung', 'SenatorBraun', 'ChuckGrassley', 'SenJoniErnst', 'JerryMoran', 'RogerMarshallMD', 'RandPaul',
+                 'SenBillCassidy', 'SenJohnKennedy', 'SenatorCollins', 'SenAngusKing', 'ChrisVanHollen', 'SenatorCardin',
+                 'SenWarren', 'SenMarkey', 'SenGaryPeters', 'SenStabenow', 'SenAmyKlobuchar', 'SenTinaSmith', 'SenatorWicker',
+                 'SenHydeSmith', 'SenHawleyPress', 'RoyBlunt', 'SteveDaines', 'SenatorTester', 'SenatorFischer', 'SenSasse',
+                 'SenCortezMasto', 'SenJackyRosen', 'SenatorShaheen', 'SenatorHassan', 'SenBooker', 'SenatorMenendez',
+                 'MartinHeinrich', 'SenatorLujan', 'SenSchumer', 'gillibrandny', 'SenThomTillis', 'SenatorBurr', 'SenJohnHoeven',
+                 'SenKevinCramer', 'SenSherrodBrown', 'senrobportman', 'SenatorLankford', 'JimInhofe', 'RonWyden', 'SenJeffMerkley',
+                 'SenToomey', 'SenBobCaseyfe', 'SenJackReed', 'SenWhitehouse', 'LindseyGrahamSC', 'SenatorTimScott', 'SenJohnThune',
+                 'SenatorRounds', 'MarshaBlackburn', 'BillHagertyTN', 'JohnCornyn', 'SenTedCruz', 'SenMikeLee', 'SenatorRomney',
+                 'SenSanders', 'SenatorLeahy', 'MarkWarner', 'timkaine', 'PattyMurray', 'SenatorCantwell', 'SenCapito',
+                 'Sen_JoeManchin', 'SenRonJohnson', 'SenatorBaldwin', 'SenJohnBarrasso'],
+
+    'Election Winner': ['Yes', 'Did not seek relection', 'Yes', 'Yes', 'Yes', 'Did not seek relection', 'Yes', 'Yes', 'Did not seek relection',
+                        'Yes', 'Yes', 'Yes', 'Did not seek relection', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes',
+                        'Did not seek relection', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes',
+                        'Did not seek relection', 'Yes', 'Yes', 'Yes', 'Did not seek relection', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes',
+                        'Did not seek relection', 'Yes', 'No', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Did not seek relection',
+                        'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Did not seek relection', 'Yes', 'Yes', 'No', 'Did not seek relection', 'Yes',
+                        'Yes', 'Yes', 'Yes', 'Did not seek relection', 'No', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes',
+                        'Yes', 'Yes', 'Did not seek relection', 'Yes', 'Did not seek relection', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes',
+                        'Did not seek relection', 'Yes', 'Yes', 'Yes'],
+
+    'Election Year': [2020, 2022, 2022, 2020, 2020, 2024, 2022, 2020, 2024, 2022, 2022, 2020, 2024, 2024, 2022, 2022, 2024, 2022, 2020,
+                      2020, 2022, 2022, 2024, 2022, 2020, 2022, 2020, 2022, 2020, 2022, 2020, 2024, 2022, 2024, 2024, 2020, 2020, 2024,
+                      2024, 2020, 2024, 2020, 2024, 2022, 2020, 2024, 2024, 2020, 2022, 2024, 2020, 2022, 2020, 2024, 2024, 2020, 2022,
+                      2024, 2020, 2022, 2022, 2024, 2024, 2022, 2022, 2020, 2022, 2020, 2022, 2024, 2020, 2024, 2020, 2022, 2022, 2020,
+                      2024, 2020, 2020, 2024, 2022, 2024, 2024, 2022, 2020, 2024, 2022, 2024, 2020, 2024, 2022, 2024, 2024],
+
+    'Incumbent': ['No', 'Yes', 'Yes', 'Yes', 'No', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes',
+                  'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'No', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes',
+                  'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes',
+                  'Yes', 'No', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes',
+                  'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'No', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes',
+                  'Yes', 'Yes', 'Yes'],
+
+    'Margin': [20.4, None, 6.3, 12.7, 2.3, None, 34.7, 33.1, None, 14.6, 14.9, 21.5, None, 12.8, 16.4, 45.1, 32.7, 31.9, 29.4, 16.1, 15.3, 20.8,
+               None, 12.2, 6.6, 23, 11.4, 23.6, 40.3, 43.7, 8.6, 17.3, 31.7, None, 19.8, 33.1, 1.7, None, 15.7, 5.3, 25.6, 10, 13.7, None, 10,
+               -7.1, 6.7, 38.3, 0.7, 1.6, 15.7, 9.1, 16.3, None, 10.1, 6.1, 14, 18.3, 1.8, None, 31.3, 32.9, -3.6, None, 32.2, 30.2, 14.9, 17.6,
+               None, -0.2, 33.1, 20.1, 10.3, 25.9, 43.5, 31.5, 29.6, 27, 9.6, 8.5, 10.4, None, 31.1, None, 12.1, 8.9, 14.5, 18.5, 43.3, None, 1, 0.9, 51]
+
+}
+
+senator_3 = pd.DataFrame(senator_3)
+df2 = pd.merge(senator_master, senator_3, on='Username', how='inner')
+df2.head(5)
+
+## Examine Data
+
+pd.set_option('max_colwidth', None)
+
+### Primary Data
+
+df1.head()
+
+df1.shape
+
+df1.isnull().sum()
+
+### Secondary Data
+
+df2.head()
+
+df2.shape
+
+## Clean Data 1
+
+df1['username'].unique()
+
+## Clean Data 2
+
+# Standardize Column Names
+df2.columns = ['state', 'senator', 'party', 'age', 'username', 'election_winner',
+              'election_year', 'incumbent', 'margin_of_victory']
+
+#Handle Missing Values
+df2.isnull().sum()  # See missing values
+
+#Alternatively, fill missing values:
+df2['age'].fillna(df2['age'].median(), inplace=True)
+df2['margin_of_victory'].fillna(0, inplace=True)  # Replace with 0 if appropriate
+
+# Convert Data Types
+df2['age'] = pd.to_numeric(df2['age'], errors='coerce')
+df2['election_year'] = pd.to_numeric(df2['election_year'], errors='coerce')
+df2['margin_of_victory'] = pd.to_numeric(df2['margin_of_victory'], errors='coerce')
+df2['state'] = df2['state'].astype('category')
+df2['party'] = df2['party'].astype('category')
+df2['election_winner'] = df2['election_winner'].astype('bool')  # If it's a True/False value
+df2['incumbent'] = df2['incumbent'].astype('bool')
+
+#Remove Duplicates
+df2 = df2.drop_duplicates()
+
+#Trim Whitespace & Standardize Text Data
+df2['senator'] = df2['senator'].str.strip().str.title()  # Remove spaces and format names
+df2['state'] = df2['state'].str.strip().str.upper()  # Standardize state abbreviations
+df2['party'] = df2['party'].str.strip().str.title()  # Standardize party names
+
+df2['party'] = (
+    df2['party']
+      .str.replace(r'\[.*?\]', '', regex=True)
+      .str.replace(r'\(Dfl\)', '', regex=True)
+      .str.strip())
+
+#Validate Age and Election Year
+df2 = df2[(df2['age'] > 25) & (df2['age'] < 100)]  # Filter unrealistic ages
+
+df2.shape
+
+df2.head()
+
+#   Prepare Data
+
+
+
+
+
+
+# Create new column combined_text
+df1['combined_text'] = df1['tweet_content']
+
+# Initialize the WordNetLemmatizer
+lemmatizer = WordNetLemmatizer()
+
+# Create stopwords set
+stop_words = set(stopwords.words('english'))
+
+# Function to get the part of speech tag for lemmatization
+def get_wordnet_pos(word):
+    """Map POS tag to first character lemmatize() accepts"""
+    tag = nltk.pos_tag([word])[0][1][0].upper()
+    tag_dict = {"J": wordnet.ADJ,
+                "N": wordnet.NOUN,
+                "V": wordnet.VERB,
+                "R": wordnet.ADV}
+    return tag_dict.get(tag, wordnet.NOUN)
+
+# Function to clean text
+def clean_text(text):
+    # Tokenize the text
+    tokens = word_tokenize(text)
+    # Convert to lowercase
+    tokens = [word.lower() for word in tokens]
+    # Remove punctuation and stopwords
+    tokens = [word for word in tokens if word.isalnum() and word not in stop_words]
+    # Lemmatize
+    tokens = [lemmatizer.lemmatize(word, get_wordnet_pos(word)) for word in tokens]
+    # Remove unwanted tokens
+    tokens = [word for word in tokens if word not in {'http', 'amp'}]
+    return ' '.join(tokens)
+
+#Applying Clean Funtion
+df1['clean_combined_text'] = df1['combined_text'].apply(clean_text)
+
+
+# Display a random sample of 5 rows from updated dataframe
+df1[['combined_text', 'clean_combined_text']].sample(5)
+
+# Sentiment Analysis
+
+
+
+# Instantiate SentimentIntensityAnalyzer
+sia = SentimentIntensityAnalyzer()
+
+%%time
+
+df1['generated_sentiment'] = df1['clean_combined_text'].apply(lambda x: sia.polarity_scores(x)['compound']) # generated sentiment scores
+df1['sentiment_label'] = df1['generated_sentiment'].apply(lambda x: 'positive' if x >= 0 else ('negative' if x <= -0 else 'neutral')) # sentiment label for each score
+df1[['username', 'generated_sentiment', 'sentiment_label']].sample(5)
+
+df1["sentiment_label"].value_counts()
+
+# Word Cloud
+
+all_text = ' '.join(df1['clean_combined_text']) # Joining all cleaned & combined tweets into one
+all_text
+
+wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_text) # Generating word cloud
+
+# creating visuals for the word cloud:
+plt.figure(figsize=(12, 6))
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis('off')
+plt.title("Most Common Words in All Tweets")
+plt.show()
+
+# Vectorize Data
+
+%%time
+
+tfidf = TfidfVectorizer(max_features=5000, stop_words='english')
+X = tfidf.fit_transform(df1['clean_combined_text'])
+y = df1['sentiment_label']  # Target
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Use the already existing TF-IDF matrix and vectorizer
+tfidf_matrix = X.toarray()  # X is your full tfidf vectorized dataset (5000 features)
+feature_names = tfidf.get_feature_names_out()
+
+# Convert to DataFrame
+tfidf_df = pd.DataFrame(tfidf_matrix, columns=feature_names)
+
+# Sum TF-IDF scores across all tweets
+tfidf_scores = tfidf_df.sum().sort_values(ascending=False)
+
+top_n = 10  # Top N scores of our choice.
+tfidf_scores = tfidf_scores.head(top_n)
+
+# Plot
+plt.figure(figsize=(10,6))
+sns.barplot(x=tfidf_scores.values, y=tfidf_scores.index, palette='viridis')
+plt.title('Top TF-IDF Words Across Tweets')
+plt.xlabel('TF-IDF Score')
+plt.ylabel('Word')
+plt.show()
+
+# Algorithm Training & Model Evaluation
+
+### Created a visual after training and evaluation to showcase model accuracy for 4 different models
+
+# Define Models
+models = {
+    "Logistic Regression": LogisticRegression(max_iter=1000),
+    "Support Vector Machine": SVC(kernel='linear'),
+    "Random Forest": RandomForestClassifier(n_estimators=100),
+    "Naive Bayes": MultinomialNB()
+}
+
+# Train and Evaluate
+results = []
+
+for model_name, model in models.items():
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    acc = accuracy_score(y_test, y_pred)
+    results.append((model_name, acc))
+
+# Show Results
+results_df = pd.DataFrame(results, columns=['Model', 'Accuracy']).sort_values(by='Accuracy', ascending=False)
+print(results_df)
+
+# Plot Results
+plt.figure(figsize=(10, 6))
+sns.barplot(x='Accuracy', y='Model', data=results_df, palette='viridis')
+plt.title('Model Comparison: Accuracy of Different Models')
+plt.xlabel('Accuracy')
+plt.ylabel('Model')
+plt.show()
+
+
+### Generating a confusion matrix for each model to show how well each model predicetd sentiment labels such as positive, negative, and neutral
+### Rows representing the real label and columns representing what the model guessed
+
+for model_name, model in models.items():
+    # Predict
+    y_pred = model.predict(X_test)
+
+    # Create confusion matrix
+    cm = confusion_matrix(y_test, y_pred, labels=['positive', 'neutral', 'negative'])
+
+    # Display
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['positive', 'neutral', 'negative'])
+    disp.plot(cmap='viridis')
+    plt.title(f"Confusion Matrix: {model_name}")
+    plt.show()
+
+# BerTopic
+
+## Install and Import Packages
+
+%%time
+
+! pip install bertopic
+
+import pandas as pd
+import re
+import string
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from bertopic import BERTopic
+
+## Setup BERTopic
+
+# To use the default model (all-MiniLM-L6-v2), you do not have to specify a model name
+topic_model = BERTopic(nr_topics=200)
+
+# Display default hyperparameters for model BERTopic
+topic_model.get_params()
+
+%%time
+
+# Train the BERTopic model on the cleaned combined text
+topics, probs = topic_model.fit_transform(df1['clean_combined_text'])
+
+# Display topics
+#  Topic_ID -1 : refers to outlier documents that do not fit well into any topics
+#  Topic_ID 0 : groups together documents that have little meaning
+#  Topic_ID 1 : the most frequent topic in the corpus
+#  Topic_ID 2 and onwards : the 2nd, …, Nth most frequent topic in the corpus
+
+topic_model.get_topics()
+
+topic_model.get_topic_info()
+
+# Display list of words and their weights that comprise Topic 1
+topic_model.get_topic(1)
+
+# Display the embeddings for Topic 1
+topic_model.topic_embeddings_[1]
+
+#topic_model.get_document_info(df1['clean_combined_text'])
+topic_info_df = topic_model.get_document_info(df1['clean_combined_text'])
+topic_info_df.head()
+
+# Display topic sizes
+#  topic_ID : # of documents assigned to topic
+topic_model.topic_sizes_
+
+# Display the representative docs for Topic 1
+topic_model.get_representative_docs(1)
+
+# Join Datasets and Output
+
+# Merge on 'username'
+merged_df = pd.merge(df1,df2 , on='username', how='inner')  # Inner join by default
+merged_df.head()
+
+df1_with_topics = pd.concat([merged_df.reset_index(drop=True), topic_info_df.reset_index(drop=True)], axis=1)
+
+df1_with_topics = df1_with_topics.drop(columns=['Document'])
+
+df1_with_topics.info()
+
+df1_with_topics.head(2)
+
+#from google.colab import files
+#df1_with_topics.to_csv('df1_with_topics.csv',  index=False)  # Saves the DataFrame as a CSV file
+#files.download('df1_with_topics.csv')  # Downloads the file to your local syst
