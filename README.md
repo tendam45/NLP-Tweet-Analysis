@@ -1,4 +1,3 @@
-# NLP-Tweet-Analysis-
 # U.S. Senators' Tweets - NLP Analysis
 
 This project analyzes tweets from U.S. Senators during the year 2020 using various natural language processing (NLP) techniques. We investigate sentiment trends, correlate tweet tone with election outcomes, and apply topic modeling to uncover prominent themes discussed during a politically significant year.
